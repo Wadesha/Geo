@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Geo / Geoplot 可视化项目展示</title>
+<!-- D3 + topojson + hexbin plugin -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-hexbin@0.2.2/build/d3-hexbin.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2028;
+    --panel-2: #222b35;
+    --border: #2d3744;
+    --text: #e6edf3;
+    --text-dim: #9aa7b4;
+    --accent: #ff7a45;
+    --accent-2: #4fd1c5;
+    --accent-3: #f6c84c;
+    --shadow: 0 8px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #1b2532 0%, var(--bg) 60%);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    padding: 96px 24px 64px;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(600px 200px at 50% 0%, rgba(255,122,69,.18), transparent 70%),
+      radial-gradient(700px 300px at 10% 30%, rgba(79,209,197,.12), transparent 70%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, #fff 0%, #9aa7b4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p.lead {
+    font-size: clamp(15px, 2vw, 18px);
+    color: var(--text-dim);
+    max-width: 760px;
+    margin: 0 auto 28px;
+  }
+  .badges {
+    display: inline-flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center;
+  }
+  .badge {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .badge b { color: var(--accent-2); font-weight: 600; }
+
+  /* LAYOUT */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+  /* NAV */
+  nav.tabs {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,20,25,.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs .inner {
+    max-width: 1200px; margin: 0 auto; padding: 10px 20px;
+    display: flex; gap: 6px; overflow-x: auto;
+  }
+  nav.tabs a {
+    color: var(--text-dim);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  nav.tabs a:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+  nav.tabs a.active { background: var(--panel-2); border-color: var(--border); color: var(--text); }
+
+  /* SECTIONS */
+  section.viz {
+    padding: 56px 0 24px;
+    border-bottom: 1px dashed var(--border);
+  }
+  section.viz h2 {
+    font-size: 26px; margin: 0 0 6px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  section.viz h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #c0410b);
+    color: #fff; font-size: 14px; font-weight: 700;
+  }
+  section.viz .desc { color: var(--text-dim); max-width: 820px; margin-bottom: 18px; }
+  section.viz .desc code { color: var(--accent-3); background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .card .canvas-wrap {
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    background: #0c1117;
+  }
+  .card .canvas-wrap svg { width: 100%; height: auto; max-width: 100%; display: block; }
+  .card .footer {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--panel-2);
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+  }
+  .card .footer .tag {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    background: rgba(79,209,197,.12); color: var(--accent-2);
+    border: 1px solid rgba(79,209,197,.25);
+  }
+  .card .footer .tag.warn { background: rgba(246,200,76,.12); color: var(--accent-3); border-color: rgba(246,200,76,.25); }
+
+  /* CONTROLS */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px 20px;
+    align-items: center; margin-bottom: 14px;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; }
+  .controls select, .controls input[type=range] {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 8px; font-size: 13px;
+  }
+
+  /* CODE BLOCK */
+  pre.code {
+    background: #0a0e13;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    color: #d1d7de;
+    margin-top: 14px;
+  }
+  pre.code .kw { color: #ff7b72; }
+  pre.code .str { color: #a5d6ff; }
+  pre.code .com { color: #8b949e; font-style: italic; }
+  pre.code .fn { color: #d2a8ff; }
+
+  /* TOOLTIP */
+  .tt {
+    position: fixed; pointer-events: none;
+    background: rgba(20,26,33,.96);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 12px; line-height: 1.4;
+    box-shadow: var(--shadow);
+    opacity: 0; transition: opacity .12s;
+    z-index: 1000; max-width: 240px;
+  }
+  .tt b { color: var(--accent-2); }
+  .tt .v { color: var(--accent-3); font-weight: 600; }
+
+  /* FOOTER */
+  footer.site {
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+  }
+  footer.site a { margin: 0 6px; }
+
+  .legend {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-dim);
+    margin-top: 8px; justify-content: center;
+  }
+  .legend .bar {
+    height: 10px; width: 200px; border-radius: 5px;
+    border: 1px solid var(--border);
+  }
+  .loading { color: var(--text-dim); padding: 40px; text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="container">
+    <h1>Geo / Geoplot 可视化项目展示</h1>
+    <p class="lead">
+      基于 Python <b>geoplot</b> + GeoPandas + Cartopy 的地理空间可视化教学项目。
+      本页面用 <b>模拟数据 / 部分采样数据</b> 在浏览器中复现 Notebook 中的五类典型图表，
+      用于性能友好的在线预览（无需运行 Python）。
+    </p>
+    <div class="badges">
+      <span class="badge">仓库：<b>Wadesha/Geo</b></span>
+      <span class="badge">引擎：<b>D3.js v7</b></span>
+      <span class="badge">数据：<b>Mock / Sample</b></span>
+      <span class="badge">图表类型：<b>5</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="inner">
+    <a href="#choropleth" class="active">1. Choropleth</a>
+    <a href="#polyplot">2. Polygon / Polyplot</a>
+    <a href="#pointplot">3. Pointplot</a>
+    <a href="#kde">4. KDE</a>
+    <a href="#hexbin">5. Hexbin</a>
+    <a href="#about">关于</a>
+  </div>
+</nav>
+
+<main class="container">
+
+  <!-- 1) CHOROPLETH -->
+  <section class="viz" id="choropleth">
+    <h2><span class="num">1</span> Choropleth（分级着色）</h2>
+    <p class="desc">
+      按行政区对数值属性进行着色。这里使用 <code>naturalearth_lowres</code> 的世界国家边界（110m 简化版），
+      并为每个国家生成 <b>模拟人口密度（人/km²）</b>。颜色越深表示密度越高（<code>OrRd</code> colormap）。
+    </p>
+
+    <div class="controls">
+      <label>Colormap：
+        <select id="cm-select">
+          <option value="OrRd">OrRd（默认）</option>
+          <option value="viridis">viridis</option>
+          <option value="coolwarm">coolwarm</option>
+          <option value="YlGnBu">YlGnBu</option>
+          <option value="magma">magma</option>
+        </select>
+      </label>
+      <label>分箱数 k：
+        <input type="range" id="k-range" min="3" max="9" step="1" value="7" />
+        <span id="k-val">7</span>
+      </label>
+      <label><input type="checkbox" id="log-scale" /> 对数尺度（偏态数据）</label>
+    </div>
+
+    <div class="card">
+      <div class="canvas-wrap"><div class="loading" id="choro-load">加载世界地图数据…</div></div>
+      <div class="footer">
+        <span class="tag">数据源：world-atlas@2 (CDN) + 模拟密度</span>
+        <span class="tag warn">性能：110m 简化，~177 个国家</span>
+        <span>对应 Python：<code>gp.choropleth(gdf, hue='pop_density_km2', cmap='OrRd', k=7)</code></span>
+      </div>
+    </div>
+
+    <pre class="code"><span class="com"># 1) Choropleth：世界人口密度（模拟数据）</span>
+<span class="kw">import</span> geopandas <span class="kw">as</span> gpd
+<span class="kw">import</span> geoplot <span class="kw">as</span> gp
+<span class="kw">import</span> matplotlib.pyplot <span class="kw">as</span> plt
+
+world_area = world.to_crs(epsg=<span class="str">3857</span>).copy()
+world_area[<span class="str">'area_km2'</span>] = world_area.geometry.area / <span class="str">1e6</span>
+world_area[<span class="str">'pop_density_km2'</span>] = world_area[<span class="str">'pop_est'</span>] / world_area[<span class="str">'area_km2'</span>]
+world_plot = world_area.to_crs(epsg=<span class="str">4326</span>)
+
+gp.<span class="fn">choropleth</span>(world_plot, hue=<span class="str">'pop_density_km2'</span>, cmap=<span class="str">'OrRd'</span>,
+              k=<span class="str">7</span>, linewidth=<span class="str">0.3</span>, edgecolor=<span class="str">'gray'</span>, legend=<span class="kw">True</span>)
+plt.<span class="fn">title</span>(<span class="str">'世界人口密度（按 km²） — 示例'</span>)
+plt.<span class="fn">show</span>()</pre>
+  </section>
+
+  <!-- 2) POLYPLOT -->
+  <section class="viz" id="polyplot">
+    <h2><span class="num">2</span> Polygon / Polyplot（面/边界可视化）</h2>
+    <p class="desc">
+      显示地理边界。这里使用 <code>nybb</code> 数据集（纽约市 5 个行政区）的 <b>简化多边形</b>，
+      并在每个多边形重心添加标签。<code>facecolor='none'</code> + <code>edgecolor='black'</code> 等价于只画边界。
+    </p>
+
+    <div class="controls">
+      <label>显示：
+        <select id="poly-mode">
+          <option value="boundary">仅边界 (polyplot facecolor=none)</option>
+          <option value="fill">填充 (polyplot facecolor=lightgray)</option>
+          <option value="both">填充 + 边界</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="poly-label" checked /> 显示行政区标签</label>
+    </div>
+
+    <div class="card">
+      <div class="canvas-wrap"><svg id="poly-svg" width="900" height="560" viewBox="0 0 900 560"></svg></div>
+      <div class="footer">
+        <span class="tag">数据源：nybb 简化（5 个行政区）</span>
+        <span>对应 Python：<code>gp.polyplot(nybb, facecolor='none', edgecolor='black', linewidth=1)</code></span>
+      </div>
+    </div>
+
+    <pre class="code"><span class="com"># 2) Polygon / Polyplot：NYC Borough 边界</span>
+fig, ax = plt.<span class="fn">subplots</span>(figsize=(<span class="str">8</span>, <span class="str">8</span>))
+gp.<span class="fn">polyplot</span>(nybb, ax=ax, facecolor=<span class="str">'none'</span>, edgecolor=<span class="str">'black'</span>, linewidth=<span class="str">1</span>)
+<span class="kw">for</span> idx, row <span class="kw">in</span> nybb.<span class="fn">iterrows</span>():
+    c = row.geometry.centroid
+    ax.<span class="fn">text</span>(c.x, c.y, row.BoroName, ha=<span class="str">'center'</span>)
+plt.<span class="fn">show</span>()</pre>
+  </section>
+
+  <!-- 3) POINTPLOT -->
+  <section class="viz" id="pointplot">
+    <h2><span class="num">3</span> Pointplot（点图）</h2>
+    <p class="desc">
+      展示点要素（POI / 站点 / 城市）。这里在世界地图上叠加 <b>40 个主要城市</b>（采样自 <code>naturalearth_cities</code>），
+      点大小编码 <b>模拟人口</b>，颜色编码 <b>所在大洲</b>。
+    </p>
+
+    <div class="controls">
+      <label>点大小映射：
+        <select id="pt-scale">
+          <option value="pop">模拟人口</option>
+          <option value="uniform">统一大小</option>
+        </select>
+      </label>
+      <label>颜色映射：
+        <select id="pt-color">
+          <option value="continent">按大洲</option>
+          <option value="uniform">统一颜色</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="canvas-wrap"><svg id="pt-svg" width="1000" height="500" viewBox="0 0 1000 500"></svg></div>
+      <div class="footer">
+        <span class="tag">数据源：naturalearth_cities 采样 40 个</span>
+        <span class="tag warn">性能：稀疏采样，避免点重叠</span>
+        <span>对应 Python：<code>gp.pointplot(cities, hue='continent', scale='population')</code></span>
+      </div>
+    </div>
+
+    <pre class="code"><span class="com"># 3) Pointplot：自然地理城市点</span>
+fig, ax = plt.<span class="fn">subplots</span>(figsize=(<span class="str">12</span>, <span class="str">6</span>))
+world_plot.boundary.<span class="fn">plot</span>(ax=ax, linewidth=<span class="str">0.5</span>, color=<span class="str">'gray'</span>)
+gp.<span class="fn">pointplot</span>(cities, ax=ax, color=<span class="str">'blue'</span>, markersize=<span class="str">20</span>)
+plt.<span class="fn">title</span>(<span class="str">'Natural Earth Cities (示例点图)'</span>)
+plt.<span class="fn">show</span>()</pre>
+  </section>
+
+  <!-- 4) KDE -->
+  <section class="viz" id="kde">
+    <h2><span class="num">4</span> KDE（核密度估计）</h2>
+    <p class="desc">
+      基于点要素估计空间密度（热点图）。这里在 NYC 范围内 <b>随机生成 N 个点</b>，
+      用 Canvas 进行高斯核密度估计，颜色越深表示点越密集（<code>Reds</code> colormap）。
+    </p>
+
+    <div class="controls">
+      <label>样本数 N：
+        <input type="range" id="kde-n" min="200" max="3000" step="100" value="1200" />
+        <span id="kde-n-val">1200</span>
+      </label>
+      <label>带宽 bw_adjust：
+        <input type="range" id="kde-bw" min="0.2" max="2" step="0.1" value="0.6" />
+        <span id="kde-bw-val">0.6</span>
+      </label>
+      <button id="kde-redraw" style="background:var(--accent);color:#fff;border:0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:13px;">重新生成</button>
+    </div>
+
+    <div class="card">
+      <div class="canvas-wrap">
+        <canvas id="kde-canvas" width="760" height="760" style="max-width:560px;background:#0c1117;border-radius:8px;"></canvas>
+      </div>
+      <div class="footer">
+        <span class="tag">数据源：NYC bounds 内随机点</span>
+        <span class="tag warn">性能：Canvas 像素级 KDE</span>
+        <span>对应 Python：<code>gp.kdeplot(points, clip=nybb.unary_union, cmap='Reds', bw_adjust=0.5)</code></span>
+      </div>
+    </div>
+
+    <pre class="code"><span class="com"># 4) KDE：基于随机生成的 NYC 点样本</span>
+<span class="kw">from</span> shapely.geometry <span class="kw">import</span> Point
+minx, miny, maxx, maxy = nybb.total_bounds
+xs = np.random.<span class="fn">uniform</span>(minx, maxx, <span class="str">1000</span>)
+ys = np.random.<span class="fn">uniform</span>(miny, maxy, <span class="str">1000</span>)
+points = gpd.GeoDataFrame(geometry=[<span class="fn">Point</span>(x,y) <span class="kw">for</span> x,y <span class="kw">in</span> <span class="fn">zip</span>(xs, ys)], crs=<span class="str">'EPSG:4326'</span>)
+points = points[points.<span class="fn">within</span>(nybb.unary_union)].<span class="fn">reset_index</span>(drop=<span class="kw">True</span>)
+
+gp.<span class="fn">kdeplot</span>(points, clip=nybb.unary_union, cmap=<span class="str">'Reds'</span>, shade=<span class="kw">True</span>, bw_adjust=<span class="str">0.5</span>, ax=ax)
+gp.<span class="fn">polyplot</span>(nybb, ax=ax, facecolor=<span class="str">'none'</span>, edgecolor=<span class="str">'black'</span>)</pre>
+  </section>
+
+  <!-- 5) HEXBIN -->
+  <section class="viz" id="hexbin">
+    <h2><span class="num">5</span> Hexbin（六边形分箱）</h2>
+    <p class="desc">
+      把点聚合到六边形网格，每个格子的颜色表示落入的点数。这里复用 KDE 的随机点，
+      用 <code>d3-hexbin</code> 进行分箱，并叠加 <b>NYC 行政区边界</b>。可在 Web Mercator 投影下叠加瓦片底图。
+    </p>
+
+    <div class="controls">
+      <label>网格大小 gridsize：
+        <input type="range" id="hex-size" min="12" max="60" step="2" value="28" />
+        <span id="hex-size-val">28</span>
+      </label>
+      <label>Colormap：
+        <select id="hex-cm">
+          <option value="YlOrRd">YlOrRd（默认）</option>
+          <option value="viridis">viridis</option>
+          <option value="inferno">inferno</option>
+          <option value="plasma">plasma</option>
+        </select>
+      </label>
+      <button id="hex-redraw" style="background:var(--accent);color:#fff;border:0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:13px;">重新生成</button>
+    </div>
+
+    <div class="card">
+      <div class="canvas-wrap"><svg id="hex-svg" width="760" height="760" viewBox="0 0 760 760"></svg></div>
+      <div class="footer">
+        <span class="tag">数据源：NYC bounds 内随机点</span>
+        <span class="tag warn">性能：d3-hexbin 客户端聚合</span>
+        <span>对应 Python：<code>ax.hexbin(xs, ys, gridsize=60, cmap='YlOrRd', mincnt=1)</code></span>
+      </div>
+    </div>
+
+    <pre class="code"><span class="com"># 5) Hexbin：Web Mercator 投影 + 瓦片底图</span>
+points_3857 = points.to_crs(epsg=<span class="str">3857</span>)
+nybb_3857   = nybb.to_crs(epsg=<span class="str">3857</span>)
+xs, ys = points_3857.geometry.x, points_3857.geometry.y
+
+fig, ax = plt.<span class="fn">subplots</span>(figsize=(<span class="str">10</span>, <span class="str">10</span>))
+hb = ax.<span class="fn">hexbin</span>(xs, ys, gridsize=<span class="str">60</span>, cmap=<span class="str">'YlOrRd'</span>, mincnt=<span class="str">1</span>)
+nybb_3857.boundary.<span class="fn">plot</span>(ax=ax, edgecolor=<span class="str">'black'</span>, linewidth=<span class="str">1</span>)
+ctx.<span class="fn">add_basemap</span>(ax, source=ctx.providers.Stamen.TonerLite)
+fig.<span class="fn">colorbar</span>(hb, ax=ax, fraction=<span class="str">0.03</span>, pad=<span class="str">0.04</span>)</pre>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="viz" id="about">
+    <h2>关于本页面</h2>
+    <p class="desc">
+      本页面是 Python 项目 <code>Wadesha/Geo</code> 的浏览器端展示。
+      由于 <code>geoplot / cartopy / contextily</code> 依赖较重，难以直接在静态页面运行，
+      因此采用 <b>模拟数据 + 采样数据</b> 的方式复现 Notebook 中各类图表的视觉效果与交互。
+      真实数据计算请参考 <code>examples/interactive_examples.ipynb</code>。
+    </p>
+    <div class="card" style="padding:18px 22px;">
+      <ul style="line-height:1.9;color:var(--text-dim);">
+        <li><b style="color:var(--text)">数据策略</b>：世界地图使用 <a href="https://github.com/topojson/world-atlas" target="_blank" rel="noopener">world-atlas 110m</a> 简化版本；NYC 行政区为手工简化多边形；城市为采样坐标；KDE/Hexbin 点为客户端随机生成。</li>
+        <li><b style="color:var(--text)">性能策略</b>：所有几何均为低分辨率版本；KDE 使用 Canvas 像素级渲染；Hexbin 使用 d3-hexbin 在浏览器端聚合。</li>
+        <li><b style="color:var(--text)">可交互</b>：每个图表都支持参数调整（colormap、分箱数、带宽、网格大小等），可实时观察图表变化。</li>
+        <li><b style="color:var(--text)">Python 源码</b>：每节底部均附对应 Python 代码片段，与 Notebook 一致。</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div>
+    <a href="https://github.com/Wadesha/Geo" target="_blank" rel="noopener">GitHub 仓库</a> ·
+    <a href="https://residentmario.github.io/geoplot/" target="_blank" rel="noopener">geoplot 文档</a> ·
+    <a href="https://geopandas.org/" target="_blank" rel="noopener">GeoPandas</a> ·
+    <a href="https://scitools.org.uk/cartopy/docs/latest/" target="_blank" rel="noopener">Cartopy</a>
+  </div>
+  <div style="margin-top:8px;">© Wadesha/Geo · 浏览器端展示（模拟数据）</div>
+</footer>
+
+<div class="tt" id="tooltip"></div>
+
+<script>
+/* ============================================================
+   全局工具
+   ============================================================ */
+const tooltip = document.getElementById('tooltip');
+function showTip(html, e) {
+  tooltip.innerHTML = html;
+  tooltip.style.opacity = 1;
+  moveTip(e);
+}
+function moveTip(e) {
+  const pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  const r = tooltip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight) y = e.clientY - r.height - pad;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+function hideTip() { tooltip.style.opacity = 0; }
+document.addEventListener('mousemove', e => { if (tooltip.style.opacity == 1) moveTip(e); });
+
+/* d3 colormaps (mimic matplotlib) */
+const cmaps = {
+  OrRd: t => d3.interpolateRgbBasis(['#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#990000'])(t),
+  YlOrRd: t => d3.interpolateRgbBasis(['#ffffcc','#ffeda0','#fed976','#feb24c','#fd8d3c','#fc4e2a','#e31a1c','#b10026'])(t),
+  YlGnBu: t => d3.interpolateRgbBasis(['#ffffd9','#edf8b1','#c7e9b4','#7fcdbb','#41b6c4','#1d91c0','#225ea8','#0c2c84'])(t),
+  viridis: t => d3.interpolateViridis(t),
+  magma:   t => d3.interpolateMagma(t),
+  inferno: t => d3.interpolateInferno(t),
+  plasma:  t => d3.interpolatePlasma(t),
+  coolwarm:t => d3.interpolateRgbBasis(['#3b4cc0','#6788ee','#9abbff','#c9c9c9','#f7a88f','#e2694f','#b40426'])(t),
+  Reds:    t => d3.interpolateReds(t),
+};
+
+/* ============================================================
+   1) CHOROPLETH — 世界人口密度（模拟）
+   ============================================================ */
+const choroState = { cm: 'OrRd', k: 7, log: false, world: null, densityById: {} };
+
+// 用确定性伪随机给每个国家分配模拟人口密度（基于国家名 hash）
+function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function mockDensity(name){
+  // 让一些已知高密度国家偏高，仅作演示
+  const high = ['Bangladesh','Taiwan','Rwanda','Netherlands','India','Japan','Philippines','Vietnam','South Korea','United Kingdom','Germany','Italy','Nigeria','Pakistan','China','Sri Lanka','Lebanon','Israel','Haiti','Belgium','Japan'];
+  const low  = ['Russia','Canada','Australia','Greenland','Iceland','Mongolia','Kazakhstan','Libya','Mauritania','Botswana','Namibia','Australia','Western Sahara'];
+  let base;
+  if (high.includes(name)) base = 200 + (hashStr(name) % 800);       // 200-1000
+  else if (low.includes(name)) base = 1 + (hashStr(name) % 12);      // 1-13
+  else base = 10 + (hashStr(name) % 180);                            // 10-190
+  return base;
+}
+
+function renderChoropleth(){
+  if (!choroState.world) return;
+  const svg = d3.select('#choropleth .canvas-wrap').html('').append('svg')
+    .attr('width', 1000).attr('height', 520).attr('viewBox','0 0 1000 520');
+  const wrap = svg.append('g');
+
+  const countries = topojson.feature(choroState.world, choroState.world.objects.countries).features;
+  // 过滤掉 Antarctica（id 010）
+  const feats = countries.filter(f => f.id !== '010' && f.properties && f.properties.name);
+
+  const proj = d3.geoNaturalEarth1().scale(180).translate([500,260]);
+  const path = d3.geoPath(proj);
+
+  const dens = feats.map(f => choroState.densityById[f.id] || mockDensity(f.properties.name));
+  feats.forEach((f,i)=>{ choroState.densityById[f.id] = dens[i]; });
+
+  const vals = choroState.log ? dens.map(v => Math.log(v+1)) : dens;
+  const [vmin, vmax] = d3.extent(vals);
+  const scale = d3.scaleQuantize().domain([vmin, vmax]).range(d3.range(choroState.k));
+  const cm = cmaps[choroState.cm];
+
+  // 网格背景（经纬度参考线）
+  wrap.append('path')
+    .datum({type:'Sphere'})
+    .attr('d', path)
+    .attr('fill', '#0c1117').attr('stroke','#2d3744');
+
+  const graticule = d3.geoGraticule().step([20,20]);
+  wrap.append('path').datum(graticule())
+    .attr('d', path).attr('fill','none').attr('stroke','#1c2630').attr('stroke-width',0.5);
+
+  wrap.selectAll('path.country')
+    .data(feats)
+    .enter().append('path')
+      .attr('class','country')
+      .attr('d', path)
+      .attr('fill', (d,i) => cm(scale(vals[i]) / (choroState.k-1)))
+      .attr('stroke', '#0c1117').attr('stroke-width', 0.4)
+      .style('cursor','pointer')
+      .on('mousemove', (e,d) => {
+        const v = choroState.densityById[d.id];
+        showTip(`<b>${d.properties.name}</b><br>人口密度（模拟）：<span class="v">${v.toFixed(1)}</span> 人/km²`, e);
+      })
+      .on('mouseout', hideTip);
+
+  // 图例
+  const legendW = 260, legendH = 12;
+  const lg = svg.append('g').attr('transform', `translate(${(1000-legendW)/2}, 498)`);
+  const grad = lg.append('defs').append('linearGradient')
+    .attr('id','cm-grad').attr('x1','0%').attr('x2','100%');
+  d3.range(0,1.01,0.05).forEach(t => grad.append('stop').attr('offset', (t*100)+'%').attr('stop-color', cm(t)));
+  lg.append('rect').attr('width', legendW).attr('height', legendH)
+    .attr('fill','url(#cm-grad)').attr('stroke','#2d3744').attr('rx',3);
+  lg.append('text').attr('x',0).attr('y',-4).attr('fill','#9aa7b4').attr('font-size',11).text(`低 (${vmin.toFixed(0)})`);
+  lg.append('text').attr('x',legendW).attr('y',-4).attr('text-anchor','end').attr('fill','#9aa7b4').attr('font-size',11).text(`高 (${vmax.toFixed(0)})`);
+}
+
+function loadChoropleth(){
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(world => {
+      choroState.world = world;
+      const ld = document.getElementById('choro-load');
+      if (ld) ld.remove();
+      renderChoropleth();
+      renderPointplot(); // 用加载好的世界地图作 pointplot 背景
+    })
+    .catch(err => {
+      const ld = document.getElementById('choro-load');
+      if (ld) ld.textContent = '加载世界地图失败：' + err.message + '（请检查网络）';
+    });
+}
+
+document.getElementById('cm-select').addEventListener('change', e => { choroState.cm = e.target.value; renderChoropleth(); });
+document.getElementById('k-range').addEventListener('input', e => {
+  choroState.k = +e.target.value;
+  document.getElementById('k-val').textContent = e.target.value;
+  renderChoropleth();
+});
+document.getElementById('log-scale').addEventListener('change', e => { choroState.log = e.target.checked; renderChoropleth(); });
+
+/* ============================================================
+   2) POLYPLOT — NYC Boroughs（简化多边形）
+   ============================================================ */
+// NYC 5 boroughs 的极简多边形（手工近似，仅供示意，非真实边界）
+const nybbSimplified = [
+  { name:'Staten Island', coords:[[-74.25,40.50],[-74.08,40.49],[-74.02,40.57],[-74.20,40.64],[-74.26,40.60]] },
+  { name:'Brooklyn',      coords:[[-74.04,40.57],[-73.83,40.58],[-73.84,40.70],[-73.97,40.71],[-74.04,40.64]] },
+  { name:'Queens',        coords:[[-73.96,40.62],[-73.70,40.65],[-73.70,40.80],[-73.90,40.80],[-73.96,40.70]] },
+  { name:'Manhattan',     coords:[[-74.02,40.69],[-73.91,40.80],[-73.94,40.88],[-74.01,40.77]] },
+  { name:'Bronx',         coords:[[-73.93,40.79],[-73.78,40.80],[-73.78,40.92],[-73.93,40.91],[-73.93,40.83]] },
+];
+
+function renderPolyplot(){
+  const svg = d3.select('#poly-svg').html('');
+  const W=900,H=560;
+  const mode = document.getElementById('poly-mode').value;
+  const showLabel = document.getElementById('poly-label').checked;
+
+  const allCoords = nybbSimplified.flatMap(b => b.coords);
+  const xs = allCoords.map(c=>c[0]), ys = allCoords.map(c=>c[1]);
+  const [minx,maxx] = d3.extent(xs), [miny,maxy] = d3.extent(ys);
+  const pad=60;
+  const sx = (W-2*pad)/(maxx-minx), sy=(H-2*pad)/(maxy-miny);
+  const s = Math.min(sx,sy);
+  const tx = x => pad + (x-minx)*s + (W-2*pad-(maxx-minx)*s)/2;
+  const ty = y => H - (pad + (y-miny)*s + (H-2*pad-(maxy-miny)*s)/2);
+
+  const colors = ['#3b4cc0','#2a9d8f','#e9c46a','#f4a261','#e76f51'];
+
+  nybbSimplified.forEach((b,i) => {
+    const line = d3.line()(b.coords.map(c=>[tx(c[0]),ty(c[1])]));
+    svg.append('path')
+      .attr('d', line + ' Z')
+      .attr('fill', mode==='boundary' ? 'none' : (mode==='both' ? colors[i]+'40' : '#2d3744'))
+      .attr('stroke', mode==='fill' ? '#444' : colors[i])
+      .attr('stroke-width', 1.6)
+      .style('cursor','pointer')
+      .on('mousemove', e => showTip(`<b>${b.name}</b><br>行政区（简化示意）`, e))
+      .on('mouseout', hideTip);
+  });
+
+  if (showLabel) {
+    nybbSimplified.forEach(b => {
+      const cx = d3.mean(b.coords.map(c=>c[0]));
+      const cy = d3.mean(b.coords.map(c=>c[1]));
+      svg.append('text')
+        .attr('x', tx(cx)).attr('y', ty(cy))
+        .attr('text-anchor','middle').attr('fill','#e6edf3')
+        .attr('font-size',13).attr('font-weight',600)
+        .attr('paint-order','stroke').attr('stroke','#0c1117').attr('stroke-width',3)
+        .text(b.name);
+    });
+  }
+}
+document.getElementById('poly-mode').addEventListener('change', renderPolyplot);
+document.getElementById('poly-label').addEventListener('change', renderPolyplot);
+
+/* ============================================================
+   3) POINTPLOT — 主要城市（采样）
+   ============================================================ */
+// 40 个主要城市（采样自 naturalearth_cities，附加模拟人口/大洲）
+const cities = [
+  {name:'New York',     lon:-74.0, lat:40.7, pop:8336, cont:'N.America'},
+  {name:'Los Angeles',  lon:-118.2,lat:34.0, pop:3979, cont:'N.America'},
+  {name:'Mexico City',  lon:-99.1, lat:19.4, pop:9209, cont:'N.America'},
+  {name:'Toronto',      lon:-79.4, lat:43.7, pop:2930, cont:'N.America'},
+  {name:'Chicago',      lon:-87.6, lat:41.9, pop:2716, cont:'N.America'},
+  {name:'Vancouver',    lon:-123.1,lat:49.3, pop:675,  cont:'N.America'},
+  {name:'São Paulo',    lon:-46.6, lat:-23.5,pop:12325,cont:'S.America'},
+  {name:'Buenos Aires', lon:-58.4, lat:-34.6,pop:3075, cont:'S.America'},
+  {name:'Rio de Janeiro',lon:-43.2,lat:-22.9,pop:6747, cont:'S.America'},
+  {name:'Lima',         lon:-77.0, lat:-12.0,pop:10092,cont:'S.America'},
+  {name:'London',       lon:-0.1,  lat:51.5, pop:8982, cont:'Europe'},
+  {name:'Paris',        lon:2.3,   lat:48.9, pop:2148, cont:'Europe'},
+  {name:'Berlin',       lon:13.4,  lat:52.5, pop:3669, cont:'Europe'},
+  {name:'Madrid',       lon:-3.7,  lat:40.4, pop:3223, cont:'Europe'},
+  {name:'Rome',         lon:12.5,  lat:41.9, pop:2873, cont:'Europe'},
+  {name:'Moscow',       lon:37.6,  lat:55.8, pop:12506,cont:'Europe'},
+  {name:'Istanbul',     lon:29.0,  lat:41.0, pop:15460,cont:'Europe'},
+  {name:'Amsterdam',    lon:4.9,   lat:52.4, pop:872,  cont:'Europe'},
+  {name:'Stockholm',    lon:18.1,  lat:59.3, pop:975,  cont:'Europe'},
+  {name:'Cairo',        lon:31.2,  lat:30.0, pop:9540, cont:'Africa'},
+  {name:'Lagos',        lon:3.4,   lat:6.5,  pop:14862,cont:'Africa'},
+  {name:'Nairobi',      lon:36.8,  lat:-1.3, pop:4397, cont:'Africa'},
+  {name:'Johannesburg', lon:28.0,  lat:-26.2,pop:5635, cont:'Africa'},
+  {name:'Cape Town',    lon:18.4,  lat:-33.9,pop:4617, cont:'Africa'},
+  {name:'Casablanca',   lon:-7.6,  lat:33.6, pop:3360, cont:'Africa'},
+  {name:'Dubai',        lon:55.3,  lat:25.2, pop:3331, cont:'Asia'},
+  {name:'Tehran',       lon:51.4,  lat:35.7, pop:9259, cont:'Asia'},
+  {name:'Mumbai',       lon:72.8,  lat:19.1, pop:20411,cont:'Asia'},
+  {name:'Delhi',        lon:77.2,  lat:28.6, pop:32941,cont:'Asia'},
+  {name:'Beijing',      lon:116.4, lat:39.9, pop:21516,cont:'Asia'},
+  {name:'Shanghai',     lon:121.5, lat:31.2, pop:27790,cont:'Asia'},
+  {name:'Tokyo',        lon:139.7, lat:35.7, pop:13960,cont:'Asia'},
+  {name:'Seoul',        lon:127.0, lat:37.5, pop:9776, cont:'Asia'},
+  {name:'Hong Kong',    lon:114.2, lat:22.3, pop:7481, cont:'Asia'},
+  {name:'Singapore',    lon:103.8, lat:1.3,  pop:5685, cont:'Asia'},
+  {name:'Bangkok',      lon:100.5, lat:13.8, pop:10539,cont:'Asia'},
+  {name:'Jakarta',      lon:106.8, lat:-6.2, pop:10770,cont:'Asia'},
+  {name:'Sydney',       lon:151.2, lat:-33.9,pop:5312, cont:'Oceania'},
+  {name:'Auckland',     lon:174.8, lat:-36.9,pop:1657, cont:'Oceania'},
+];
+const contColors = {
+  'N.America':'#4fd1c5','S.America':'#f6c84c','Europe':'#ff7a45',
+  'Africa':'#a78bfa','Asia':'#f87171','Oceania':'#60a5fa'
+};
+
+function renderPointplot(){
+  const svg = d3.select('#pt-svg').html('');
+  const W=1000,H=500;
+  // 用同样的世界 110m 地图作背景（如果加载完成）
+  if (choroState.world) {
+    const proj = d3.geoNaturalEarth1().scale(180).translate([500,250]);
+    const path = d3.geoPath(proj);
+    const countries = topojson.feature(choroState.world, choroState.world.objects.countries).features;
+    svg.append('path').datum({type:'Sphere'}).attr('d',path).attr('fill','#0c1117');
+    svg.selectAll('path.bg').data(countries).enter().append('path')
+      .attr('d',path).attr('fill','#1a2028').attr('stroke','#2d3744').attr('stroke-width',0.3);
+  } else {
+    svg.append('rect').attr('width',W).attr('height',H).attr('fill','#0c1117');
+  }
+
+  const proj = d3.geoNaturalEarth1().scale(180).translate([500,250]);
+  const scaleMode = document.getElementById('pt-scale').value;
+  const colorMode = document.getElementById('pt-color').value;
+
+  // 大洲图例
+  if (colorMode === 'continent') {
+    const legend = svg.append('g').attr('transform','translate(12, 12)');
+    Object.entries(contColors).forEach(([k,c],i) => {
+      const g = legend.append('g').attr('transform',`translate(${i*92},0)`);
+      g.append('circle').attr('cx',6).attr('cy',6).attr('r',5).attr('fill',c);
+      g.append('text').attr('x',16).attr('y',10).attr('fill','#9aa7b4').attr('font-size',11).text(k);
+    });
+  }
+
+  const rScale = d3.scaleSqrt().domain([0, 35000]).range([2.5, 16]);
+  svg.selectAll('circle.city').data(cities).enter().append('circle')
+    .attr('class','city')
+    .attr('cx', d => proj([d.lon,d.lat])[0])
+    .attr('cy', d => proj([d.lon,d.lat])[1])
+    .attr('r', d => scaleMode==='pop' ? rScale(d.pop) : 4)
+    .attr('fill', d => colorMode==='continent' ? contColors[d.cont] : '#4fd1c5')
+    .attr('fill-opacity', 0.75)
+    .attr('stroke', '#0c1117').attr('stroke-width', 0.6)
+    .style('cursor','pointer')
+    .on('mousemove', (e,d) => showTip(`<b>${d.name}</b><br>大洲：${d.cont}<br>模拟人口：<span class="v">${(d.pop*1000).toLocaleString()}</span>`, e))
+    .on('mouseout', hideTip);
+}
+document.getElementById('pt-scale').addEventListener('change', renderPointplot);
+document.getElementById('pt-color').addEventListener('change', renderPointplot);
+
+/* ============================================================
+   4) KDE — Canvas 像素级核密度估计
+   ============================================================ */
+const kdeCanvas = document.getElementById('kde-canvas');
+const kdeCtx = kdeCanvas.getContext('2d');
+const W_KDE = kdeCanvas.width, H_KDE = kdeCanvas.height;
+// NYC bounding box (lon/lat) — 与 polyplot 一致
+const NYC_BBOX = { minx:-74.26, maxx:-73.70, miny:40.49, maxy:40.92 };
+function lonLatToPxKDE(lon, lat){
+  const x = (lon - NYC_BBOX.minx) / (NYC_BBOX.maxx - NYC_BBOX.minx) * W_KDE;
+  const y = H_KDE - (lat - NYC_BBOX.miny) / (NYC_BBOX.maxy - NYC_BBOX.miny) * H_KDE;
+  return [x, y];
+}
+function generatePoints(n){
+  const pts = [];
+  // 多中心高斯混合，使热点更明显
+  const centers = [
+    {x:0.45, y:0.55, w:0.4}, // Manhattan
+    {x:0.60, y:0.50, w:0.3}, // Queens
+    {x:0.20, y:0.18, w:0.2}, // Staten Island
+    {x:0.30, y:0.30, w:0.3}, // Brooklyn
+    {x:0.55, y:0.75, w:0.2}, // Bronx
+  ];
+  for (let i=0;i<n;i++){
+    const c = centers[Math.floor(Math.random()*centers.length)];
+    // box-muller
+    const u = Math.random(), v = Math.random();
+    const z0 = Math.sqrt(-2*Math.log(u||1e-9)) * Math.cos(2*Math.PI*v);
+    const z1 = Math.sqrt(-2*Math.log(u||1e-9)) * Math.sin(2*Math.PI*v);
+    const spread = 0.13 * (1/c.w);
+    let fx = c.x + z0*spread;
+    let fy = c.y + z1*spread;
+    if (fx<0) fx=0; if (fx>1) fx=1;
+    if (fy<0) fy=0; if (fy>1) fy=1;
+    const lon = NYC_BBOX.minx + fx * (NYC_BBOX.maxx-NYC_BBOX.minx);
+    const lat = NYC_BBOX.miny + fy * (NYC_BBOX.maxy-NYC_BBOX.miny);
+    pts.push([lon,lat]);
+  }
+  return pts;
+}
+function renderKDE(points, bw){
+  const ctx = kdeCtx;
+  const img = ctx.createImageData(W_KDE, H_KDE);
+  // 把点转换到像素坐标
+  const ppx = points.map(p => lonLatToPxKDE(p[0], p[1]));
+  // 像素步长（采样以提速）
+  const step = 3;
+  const sigma = bw * 40; // 像素空间标准差
+  const denom = 2 * sigma * sigma;
+  const cutoff = sigma * 3; // 截断半径
+  // 预计算 colormap 查找表
+  const lut = new Uint8ClampedArray(256 * 4);
+  for (let i=0;i<256;i++){
+    const c = d3.color(cmaps.Reds(i/255));
+    lut[i*4]=c.r; lut[i*4+1]=c.g; lut[i*4+2]=c.b; lut[i*4+3]=255;
+  }
+  // 先计算密度并找最大值
+  const dens = new Float32Array(W_KDE * H_KDE);
+  let maxD = 0;
+  for (let y=0; y<H_KDE; y+=step){
+    for (let x=0; x<W_KDE; x+=step){
+      let d = 0;
+      for (let k=0;k<ppx.length;k++){
+        const dx = x - ppx[k][0];
+        const dy = y - ppx[k][1];
+        if (Math.abs(dx) > cutoff || Math.abs(dy) > cutoff) continue;
+        const r2 = dx*dx + dy*dy;
+        if (r2 > cutoff*cutoff) continue;
+        d += Math.exp(-r2/denom);
+      }
+      // 写入 step x step 块
+      for (let dy=0; dy<step && y+dy<H_KDE; dy++){
+        for (let dx=0; dx<step && x+dx<W_KDE; dx++){
+          dens[(y+dy)*W_KDE + (x+dx)] = d;
+        }
+      }
+      if (d > maxD) maxD = d;
+    }
+  }
+  // 渲染
+  for (let i=0; i<dens.length; i++){
+    let t = maxD > 0 ? dens[i]/maxD : 0;
+    // 透明度也按密度调整，使低密度处可见底色
+    const idx = Math.floor(t * 255);
+    const o = i*4;
+    const r = lut[idx*4], g = lut[idx*4+1], b = lut[idx*4+2];
+    // 与背景 (12,17,23) 混合
+    const a = t;
+    img.data[o]   = r*a + 12*(1-a);
+    img.data[o+1] = g*a + 17*(1-a);
+    img.data[o+2] = b*a + 23*(1-a);
+    img.data[o+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  // 叠加 NYC 边界
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1.4;
+  nybbSimplified.forEach(b => {
+    ctx.beginPath();
+    b.coords.forEach((c,i) => {
+      const [px,py] = lonLatToPxKDE(c[0],c[1]);
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    });
+    ctx.closePath();
+    ctx.stroke();
+  });
+  // 图例
+  drawColorbar(ctx, W_KDE-180, 20, 140, 10, cmaps.Reds, '密度');
+}
+function drawColorbar(ctx, x, y, w, h, fn, label){
+  for (let i=0;i<w;i++){
+    ctx.fillStyle = fn(i/w);
+    ctx.fillRect(x+i, y, 1, h);
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = '#9aa7b4';
+  ctx.font = '11px sans-serif';
+  ctx.fillText(label + ' 低', x, y-4);
+  ctx.textAlign='right';
+  ctx.fillText('高', x+w, y-4);
+  ctx.textAlign='start';
+}
+let kdePoints = [];
+function redrawKDE(){
+  const n = +document.getElementById('kde-n').value;
+  const bw = +document.getElementById('kde-bw').value;
+  document.getElementById('kde-n-val').textContent = n;
+  document.getElementById('kde-bw-val').textContent = bw.toFixed(1);
+  kdePoints = generatePoints(n);
+  renderKDE(kdePoints, bw);
+}
+document.getElementById('kde-n').addEventListener('input', e => {
+  document.getElementById('kde-n-val').textContent = e.target.value;
+});
+document.getElementById('kde-bw').addEventListener('input', e => {
+  document.getElementById('kde-bw-val').textContent = (+e.target.value).toFixed(1);
+});
+document.getElementById('kde-redraw').addEventListener('click', () => {
+  const n = +document.getElementById('kde-n').value;
+  const bw = +document.getElementById('kde-bw').value;
+  kdePoints = generatePoints(n);
+  renderKDE(kdePoints, bw);
+});
+
+/* ============================================================
+   5) HEXBIN — d3-hexbin
+   ============================================================ */
+function renderHexbin(){
+  if (!kdePoints.length) return;
+  const svg = d3.select('#hex-svg').html('');
+  const W=760,H=760;
+  svg.append('rect').attr('width',W).attr('height',H).attr('fill','#0c1117');
+
+  const radius = +document.getElementById('hex-size').value;
+  document.getElementById('hex-size-val').textContent = radius;
+  const cm = cmaps[document.getElementById('hex-cm').value];
+
+  // 投影点（与 KDE 同坐标系）
+  const points = kdePoints.map(p => lonLatToPxKDE(p[0], p[1]));
+
+  const hexbin = d3.hexbin().radius(radius).extent([[0,0],[W,H]]);
+  const bins = hexbin(points);
+
+  // 画 NYC 边界（先画在底层之上）
+  const drawBoro = () => {
+    nybbSimplified.forEach(b => {
+      const line = d3.line()(b.coords.map(c => lonLatToPxKDE(c[0],c[1])));
+      svg.append('path').attr('d', line + ' Z')
+        .attr('fill','none').attr('stroke','rgba(255,255,255,0.55)').attr('stroke-width',1.4);
+    });
+  };
+
+  const maxCount = d3.max(bins, d => d.length) || 1;
+  const color = d => cm(Math.sqrt(d.length / maxCount));
+
+  svg.append('g').attr('class','hexes')
+    .selectAll('path.hex')
+    .data(bins)
+    .enter().append('path')
+      .attr('class','hex')
+      .attr('d', hexbin.hexagon())
+      .attr('transform', d => `translate(${d.x},${d.y})`)
+      .attr('fill', color)
+      .attr('stroke', '#0c1117')
+      .attr('stroke-width', 0.3)
+      .style('cursor','pointer')
+      .on('mousemove', (e,d) => showTip(`六边形分箱<br>点数：<span class="v">${d.length}</span>`, e))
+      .on('mouseout', hideTip);
+
+  drawBoro();
+
+  // 图例
+  const lg = svg.append('g').attr('transform', `translate(${W-160}, 20)`);
+  for (let i=0;i<140;i++){
+    lg.append('rect').attr('x',i).attr('y',0).attr('width',1).attr('height',10)
+      .attr('fill', cm(i/140));
+  }
+  lg.append('rect').attr('width',140).attr('height',10).attr('fill','none').attr('stroke','#2d3744');
+  lg.append('text').attr('x',0).attr('y',-4).attr('fill','#9aa7b4').attr('font-size',11).text('点数 0');
+  lg.append('text').attr('x',140).attr('y',-4).attr('text-anchor','end').attr('fill','#9aa7b4').attr('font-size',11).text(maxCount);
+}
+document.getElementById('hex-size').addEventListener('input', renderHexbin);
+document.getElementById('hex-cm').addEventListener('change', renderHexbin);
+document.getElementById('hex-redraw').addEventListener('click', () => {
+  const n = +document.getElementById('kde-n').value;
+  const bw = +document.getElementById('kde-bw').value;
+  kdePoints = generatePoints(n);
+  renderKDE(kdePoints, bw);
+  renderHexbin();
+});
+
+/* ============================================================
+   导航高亮（scroll spy）
+   ============================================================ */
+const navLinks = document.querySelectorAll('nav.tabs a');
+const sections = ['choropleth','polyplot','pointplot','kde','hexbin','about'].map(id => document.getElementById(id));
+function onScroll(){
+  const y = window.scrollY + 120;
+  let cur = sections[0].id;
+  sections.forEach(s => { if (s.offsetTop <= y) cur = s.id; });
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#'+cur));
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+
+/* ============================================================
+   初始化
+   ============================================================ */
+renderPolyplot();
+redrawKDE();
+renderHexbin();
+renderPointplot(); // 先用空背景渲染，地图加载后再覆盖
+loadChoropleth();  // 异步加载世界地图，完成后会渲染 choropleth 与 pointplot 背景
+</script>
+</body>
+</html>

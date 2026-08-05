@@ -1,3 +1,5 @@
+> 在线展示（GitHub Pages）：https://wadesha.github.io/Geo/
+
 # Geo/Geoplot 使用说明（中文）
 
 本 README 针对使用 Python 的 geoplot 库（基于 geopandas、matplotlib、cartopy）来绘制地理空间图形的常见输出与具体方法进行详细说明。内容包含数据准备、常见图类型、参数解释、示例代码、投影/底图处理、色标/图例设置、输出保存与调优建议，旨在帮助你理解每种图的含义以及如何调整参数获得期望的可视化结果。
